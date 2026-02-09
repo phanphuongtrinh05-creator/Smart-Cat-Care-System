@@ -1,0 +1,16 @@
+# Hardware Architecture (Preliminary)
+
+## 1. Pin Mapping (Raspberry Pi 4)
+| Component | GPIO Pin | Protocol | Purpose |
+| :--- | :--- | :--- | :--- |
+| **PN532 RFID** | 9, 10, 11 | SPI | Fast pet identification |
+| **NEMA 17** | 17, 27 | Digital | Precision food dispensing |
+| **Solenoid Lock** | 18 | PWM/Dig | Door locking mechanism |
+| **JSN-SR04T** | 23, 24 | Digital | Ultrasonic food level sensing |
+| **Dual OLEDs** | 2, 3 | I2C | Real-time UI feedback |
+| **E-Button** | 22 | Interrupt | Emergency manual override |
+
+## 2. Power Distribution
+- **12V DC Adapter:** Powers the NEMA 17 motor and Solenoid Lock via Relay.
+- **5V Buck Converter:** Steps down 12V to 5V to power the Raspberry Pi 4 and sensors.
+- **UPS Shield:** Provides battery backup to prevent system failure during power outages.
