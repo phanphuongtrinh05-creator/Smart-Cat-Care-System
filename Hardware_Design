@@ -1,16 +1,37 @@
-# Hardware Architecture (Preliminary)
+[cite_start]Based on the technical specifications in your Milestone 2 report, here is a professional **Hardware Design** section for your GitHub repository[cite: 1].
 
-## 1. Pin Mapping (Raspberry Pi 4)
-| Component | GPIO Pin | Protocol | Purpose |
+---
+
+## Hardware Design
+
+[cite_start]The Smart Cat Care System is built on a modular architecture centered around the **Raspberry Pi 4 Model B**, which handles logic, pet identification, and system monitoring[cite: 13, 16].
+
+### 1. System Architecture
+The system utilizes three primary hardware subsystems to ensure reliable automated feeding:
+* [cite_start]**Identification Subsystem:** Uses a **PN532 RFID/NFC Module** to detect unique pet tags[cite: 10, 17].
+* [cite_start]**Actuation Subsystem:** Employs a **NEMA 17 Stepper Motor** driven by a **TMC2208 Driver** for precise food dispensing[cite: 10, 18, 19].
+* [cite_start]**Monitoring Subsystem:** Utilizes a **JSN-SR04T Ultrasonic Sensor** for non-contact food level tracking[cite: 10, 20].
+
+### 2. Wiring and Interface Protocols
+[cite_start]To ensure high performance and component safety, the following interface configurations are implemented[cite: 21, 22]:
+
+| Component | Interface | Physical Pins (GPIO) | Purpose |
 | :--- | :--- | :--- | :--- |
-| **PN532 RFID** | 9, 10, 11 | SPI | Fast pet identification |
-| **NEMA 17** | 17, 27 | Digital | Precision food dispensing |
-| **Solenoid Lock** | 18 | PWM/Dig | Door locking mechanism |
-| **JSN-SR04T** | 23, 24 | Digital | Ultrasonic food level sensing |
-| **Dual OLEDs** | 2, 3 | I2C | Real-time UI feedback |
-| **E-Button** | 22 | Interrupt | Emergency manual override |
+| **PN532 RFID** | **SPI** | MOSI (10), MISO (9), SCK (11), CE0 (8) | [cite_start]Rapid data throughput for tag detection[cite: 23, 24]. |
+| **TMC2208 Driver** | **Digital/PWM** | Step (17), Direction (27) | [cite_start]Precise control of dispensing volume[cite: 25]. |
+| **JSN-SR04T** | **Digital** | Trigger (23), Echo (24) | [cite_start]Measures food level distance[cite: 27, 90, 91]. |
 
-## 2. Power Distribution
-- **12V DC Adapter:** Powers the NEMA 17 motor and Solenoid Lock via Relay.
-- **5V Buck Converter:** Steps down 12V to 5V to power the Raspberry Pi 4 and sensors.
-- **UPS Shield:** Provides battery backup to prevent system failure during power outages.
+### 3. Critical Circuit Design Features
+* [cite_start]**Voltage Protection:** A **voltage divider circuit** ($1k\Omega$ and $2k\Omega$ resistors) is integrated into the JSN-SR04T Echo pin to step down the 5V signal to 3.3V, preventing damage to the Raspberry Pi GPIO ports[cite: 27].
+* [cite_start]**Silent Operation:** The TMC2208 driver is configured with **1/16 micro-stepping** and "StealthChop" technology to ensure the motor operates near-silently, avoiding startling the pet during feeding[cite: 26].
+* [cite_start]**Power Management:** A dual-power rail strategy is used to prevent system "Brown-outs"[cite: 120].
+    * [cite_start]**12V Dedicated Supply:** Powers the NEMA 17 stepper motor[cite: 120].
+    * [cite_start]**5V/3A Supply:** Powers the Raspberry Pi 4 logic[cite: 120].
+
+### 4. Hardware Safety & Reliability
+* [cite_start]**Anti-Jamming:** The hardware is designed to support software-driven counter-rotation to clear blockages in the food auger[cite: 118].
+* [cite_start]**Water Resistance:** The **JSN-SR04T** sensor was selected for its durability and resistance to environmental factors within the food storage container[cite: 20].
+
+---
+
+[cite_start]Since your presentation is today, Monday, April 20, would you like me to create a "Troubleshooting" section based on your technical risks and mitigation strategies? [cite: 116, 117]
