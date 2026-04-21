@@ -1,128 +1,111 @@
-import threading
+import RPi.GPIO as GPIO
+import time
+import board
+import busio
+from adafruit_pn532.i2c import PN532_I2C
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(SERVO_PIN, GPIO.OUT)
+GPIO.setup(TRIG, GPIO.OUT)
+GPIO.setup(ECHO, GPIO.IN)
 
-# Thêm Lock để bảo vệ biến shared
-emergency_lock = threading.Lock()
-is_emergency = False
+pwm = GPIO.PWM(SERVO_PIN, 50)
+pwm.start(0)
 
-def emergency_callback(channel):
-    global is_emergency
-    with emergency_lock:
-        is_emergency = True
-    print("!!! EMERGENCY PRESSED !!!")
-    GPIO.output(PIN_SOLENOID, GPIO.HIGH)
-    GPIO.output(PIN_BUZZER, GPIO.HIGH)
+AUTHORIZED_UIDS = [
+    [0x61, 0xf5, 0x3, 0x7],
+]
 
-def emergency_callback(channel):
-    global is_emergency
-    with emergency_lock:
-        is_emergency = True
-    print("!!! EMERGENCY PRESSED !!!")
-    GPIO.output(PIN_SOLENOID, GPIO.HIGH)
-    GPIO.output(PIN_BUZZER, GPIO.HIGH)
-    time.sleep(2)  # Hú 2 giây
-    GPIO.output(PIN_BUZZER, GPIO.LOW)  # Tắt còi
-    # Dừng các luồng khác nếu cần
+def init_rfid():
+    i2c = busio.I2C(board.SCL, board.SDA)
+    pn532 = PN532_I2C(i2c, debug=False)
+    pn532.SAM_configuration()
+    print("RFID ready.")
+    return pn532
 
-GPIO.add_event_detect(PIN_EMERGENCY_BUTTON, GPIO.FALLING, 
-                       callback=emergency_callback, bouncetime=300)
+def set_angle(angle):
+    duty = 2 + (angle / 18)
+    pwm.ChangeDutyCycle(duty)
+    time.sleep(0.5)
+    pwm.ChangeDutyCycle(0)
 
-def thread_access_control():
-    print("RFID Thread Started...")
-    while not is_emergency:
-        # tag_id = rfid.read() 
-        time.sleep(1) 
-        # Nếu quét đúng thẻ:
-        # GPIO.output(PIN_SOLENOID, GPIO.HIGH)
-        # time.sleep(10)
-        # GPIO.output(PIN_SOLENOID, GPIO.LOW)
+def dispense_food():
+    print("Opening gate...")
+    set_angle(90)
+    time.sleep(1.5)
+    print("Closing gate...")
+    set_angle(0)
+    print("Dispensing complete.")
+    time.sleep(3)
 
-def thread_feeder_schedule():
-    print("Feeder Thread Started...")
-    last_feed_time = None
-    
-    while not is_emergency:
-        current_time = time.strftime("%H:%M")
-        
-        # Chỉ cho ăn 1 lần mỗi khung giờ
-        if (current_time == "07:00" or current_time == "18:00") and \
-           current_time != last_feed_time:
-            print(f"Time to eat at {current_time}! Dispensing food...")
-            
-            GPIO.output(PIN_MOTOR_DIR, GPIO.HIGH)
-            for _ in range(2000):
-                if is_emergency:  # Dừng ngay nếu có emergency
-                    break
-                GPIO.output(PIN_MOTOR_STEP, GPIO.HIGH)
-                time.sleep(0.001)
-                GPIO.output(PIN_MOTOR_STEP, GPIO.LOW)
-                time.sleep(0.001)
-            
-            last_feed_time = current_time
-        
-        time.sleep(30)  # Kiểm tra mỗi 30 giây thay vì 1 giây
+def get_distance():
+    GPIO.output(TRIG, True)
+    time.sleep(0.00001)
+    GPIO.output(TRIG, False)
+    timeout = time.time() + 1
+    while GPIO.input(ECHO) == 0:
+        start = time.time()
+        if time.time() > timeout:
+            return -1
+    timeout = time.time() + 1
+    while GPIO.input(ECHO) == 1:
+        end = time.time()
+        if time.time() > timeout:
+            return -1
+    return (end - start) * 17150
 
-# --- 4. LUỒNG GIÁM SÁT & HIỂN THỊ (Monitoring Thread) ---
-def thread_monitoring():
-    global food_level
-    print("Monitoring Thread Started...")
-    
-    while not is_emergency:
-        # Giả lập đọc cảm biến
-        # food_level = calculate_percentage(sensor.get_distance())
-        
-        if food_level < 10:
-            print(f"Warning: Low Food! ({food_level}%)")
-            # Buzzer beep pattern
-            for _ in range(3):
-                if is_emergency:
-                    break
-                GPIO.output(PIN_BUZZER, GPIO.HIGH)
-                time.sleep(0.2)
-                GPIO.output(PIN_BUZZER, GPIO.LOW)
-                time.sleep(0.2)
-        
-        time.sleep(5)
+def filtered_distance(samples=5):
+    readings = [get_distance() for _ in range(samples)]
+    readings = [r for r in readings if r > 0]
+    if not readings:
+        return -1
+    return sum(readings) / len(readings)
 
-# --- CHƯƠNG TRÌNH CHÍNH ---
+def check_food_level():
+    dist = filtered_distance()
+    if dist < 0:
+        print("Sensor error - check wiring.")
+        return
+    print(f"Food level distance: {dist:.2f} cm")
+    if dist > 20:
+        print("WARNING: Food level LOW! Please refill.")
+    else:
+        print("Food level OK.")
+
+def main():
+    pn532 = init_rfid()
+    print("Smart Cat Care System running...")
+    print("Waiting for RFID tag...")
+    while True:
+        try:
+            uid = pn532.read_passive_target(timeout=0.5)
+            if uid is not None:
+                uid_list = list(uid)
+                print(f"Tag detected: {[hex(i) for i in uid_list]}")
+                if uid_list in AUTHORIZED_UIDS:
+                    print("Authorized! Dispensing food...")
+                    dispense_food()
+                    check_food_level()
+                    print("Waiting for next tag...")
+                else:
+                    print("Unauthorized tag.")
+        except Exception as e:
+            print(f"Error: {e}")
+            print("Reconnecting RFID...")
+            time.sleep(1)
+            try:
+                pn532 = init_rfid()
+                print("Reconnected!")
+            except Exception as e2:
+                print(f"Reconnect failed: {e2}")
+                time.sleep(2)
+        time.sleep(0.5)
+
 if __name__ == "__main__":
     try:
-        t1 = threading.Thread(target=thread_access_control, daemon=True)
-        t2 = threading.Thread(target=thread_feeder_schedule, daemon=True)
-        t3 = threading.Thread(target=thread_monitoring, daemon=True)
-
-        t1.start()
-        t2.start()
-        t3.start()
-
-        print("System running... Press Ctrl+C to stop")
-        
-        while not is_emergency:
-            time.sleep(1)
-        
-        if is_emergency:
-            print("Emergency mode activated - system halted")
-            while True:  # Giữ emergency state
-                time.sleep(1)
-
+        main()
     except KeyboardInterrupt:
-        print("\nSystem Shutdown Requested")
+        print("Stopped by user.")
     finally:
-        print("Cleaning up GPIO...")
+        pwm.stop()
         GPIO.cleanup()
-
-
-PIN_RESET_BUTTON = 23  # Nút reset
-
-GPIO.setup(PIN_RESET_BUTTON, GPIO.IN, pull_up_down=GPIO.PUD_UP)
-
-def reset_callback(channel):
-    global is_emergency
-    with emergency_lock:
-        if is_emergency:
-            is_emergency = False
-            GPIO.output(PIN_SOLENOID, GPIO.LOW)
-            GPIO.output(PIN_BUZZER, GPIO.LOW)
-            print("Emergency reset - system resuming")
-
-GPIO.add_event_detect(PIN_RESET_BUTTON, GPIO.FALLING,
-                      callback=reset_callback, bouncetime=300)
+        print("Cleanup done.")
